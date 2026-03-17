@@ -60,29 +60,16 @@ The bridge listens on port 3737 by default. Set `PERMITTER_PORT` env var to chan
 
 ### 3. Add the hook to your project
 
-Create or edit `.claude/settings.json` in your project:
+From your project directory, run the setup script:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/permitter/bridge/hook.js"
-          }
-        ]
-      }
-    ]
-  }
-}
+```bash
+cd ~/my-project
+bash /path/to/permitter/setup.sh
 ```
 
-Replace the path with the absolute path to `hook.js` on your machine.
+This creates `.claude/settings.json` with the hook pointing at `hook.js`. The path is resolved automatically.
 
-To enable for **all** projects, put the same config in `~/.claude/settings.json`.
+To enable for **all** projects instead, put the generated config in `~/.claude/settings.json`.
 
 ### 4. Quickstart walkthrough
 

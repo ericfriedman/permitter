@@ -79,55 +79,33 @@ The device will reboot and show the boot screen. Once it connects to WiFi, you'l
 
 **You can now unplug the USB cable.** The M5Stack has a built-in battery and communicates over WiFi from here on.
 
-## Step 3: Add the hook to your project
+## Step 3: Hook up a project
 
-Go to whatever project you want to use Permitter with:
+Go to whatever project you want to use Permitter with and run the setup script:
 
 ```bash
 cd ~/my-project
-mkdir -p .claude
+bash /path/to/permitter/setup.sh
 ```
 
-Create `.claude/settings.json`:
+This creates `.claude/settings.json` in your project with the hook configured. The path to `hook.js` is resolved automatically — no manual editing needed.
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/permitter/bridge/hook.js"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+You only need to run this once per project.
 
-Replace `/absolute/path/to/permitter` with the real path. For example:
+## Step 4: Start a session
 
-```json
-"command": "node /Users/yourname/permitter/bridge/hook.js"
-```
-
-## Step 4: Start the bridge and launch Claude Code
+From your project directory:
 
 ```bash
 # Start the bridge in the background
-node /absolute/path/to/permitter/bridge/index.js &
-
-# You should see:
-# Permitter bridge listening on http://0.0.0.0:3737
+node /path/to/permitter/bridge/index.js &
+# => Permitter bridge listening on http://0.0.0.0:3737
 
 # Launch Claude Code
 claude
 ```
 
-That's two commands. The bridge runs in the background of the same terminal.
+Two commands, one terminal. The bridge runs in the background.
 
 ## Step 5: Your first approval
 
