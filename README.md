@@ -6,16 +6,15 @@ Built on the **M5Stack Core2** (ESP32, 320x240 IPS capacitive touch).
 
 ## How it works
 
-```
-Claude Code ──PreToolUse hook──> bridge server ──HTTP──> M5Stack Core2
-                                      <──────────────── tap Yes/Once/No
-```
+> **Claude Code** &rarr; `PreToolUse` hook &rarr; **Bridge Server** &rarr; HTTP &rarr; **M5Stack Core2**
+>
+> **M5Stack Core2** &rarr; tap Trust / Once / Deny &rarr; **Bridge Server** &rarr; **Claude Code**
 
 1. Claude Code fires a `PreToolUse` hook before each tool call
-2. `hook.js` sends the request to the bridge server
-3. The bridge holds the request until the M5Stack device polls it
+2. `hook.js` sends the request to the bridge server on your local network
+3. The bridge holds the request until the M5Stack device polls it over WiFi
 4. You tap **Trust** (always allow), **Once** (allow this time), or **Deny**
-5. The response flows back through the chain to Claude Code
+5. The response flows back through the chain and Claude Code continues
 
 If the bridge is unreachable, the hook falls back to Claude Code's normal terminal prompt — no disruption.
 
