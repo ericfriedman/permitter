@@ -2,7 +2,7 @@
 
 A physical permission panel for [Claude Code](https://claude.ai/claude-code). Intercepts tool-use permission prompts over WiFi and lets you approve or deny them by tapping a touchscreen.
 
-Built on the **M5Stack Core2** (ESP32, 320x240 IPS capacitive touch).
+Built on the [M5Stack Core2](https://amzn.to/4snph8w) (ESP32, 320x240 IPS capacitive touch).
 
 ## How it works
 
@@ -17,6 +17,16 @@ Built on the **M5Stack Core2** (ESP32, 320x240 IPS capacitive touch).
 5. The response flows back through the chain and Claude Code continues
 
 If the bridge is unreachable, the hook falls back to Claude Code's normal terminal prompt — no disruption.
+
+## Features
+
+- **Three response options** — Trust (always allow this tool), Once (allow this call), Deny (block it)
+- **Trusted tool memory** — tap Trust once and that tool auto-approves for the rest of the session, with a brief activity flash on screen so you can see what's running
+- **Dual approval detection** — some tools (Bash, Fetch, WebSearch) also trigger Claude Code's built-in terminal prompt. The device warns you with "ALSO NEEDS TERMINAL APPROVAL" so you know to check your keyboard too
+- **Risk classification** — requests are color-coded by risk level (red/yellow/green)
+- **Three themes** — Terminal (CRT green), Skeuo (iOS 6), Brutalist (concrete/hazard). Switchable at runtime, persists across reboots
+- **12/24-hour clock** — toggle in settings, persists across reboots
+- **Graceful fallback** — if the bridge is down, Claude Code falls back to its normal terminal prompt
 
 ## Setup
 
@@ -58,7 +68,7 @@ node index.js
 
 The bridge listens on port 3737 by default. Set `PERMITTER_PORT` env var to change it.
 
-### 3. Add the hook to your project
+### 3. Hook up your project
 
 From your project directory, run the setup script:
 
@@ -69,76 +79,21 @@ bash /path/to/permitter/setup.sh
 
 This creates `.claude/settings.json` with the hook pointing at `hook.js`. The path is resolved automatically.
 
-To enable for **all** projects instead, put the generated config in `~/.claude/settings.json`.
+Or to enable for **all** projects, put the generated config in `~/.claude/settings.json`.
 
-### 4. Quickstart walkthrough
-
-This walks you through your first Permitter-approved Claude Code session, start to finish.
-
-**Terminal 1 — start the bridge:**
+### 4. Use it
 
 ```bash
-cd permitter/bridge
-node index.js
-# => Permitter bridge listening on http://0.0.0.0:3737
-```
+# Start the bridge in the background
+node /path/to/permitter/bridge/index.js &
 
-Leave this running.
-
-**Terminal 2 — set up your project:**
-
-```bash
-cd ~/my-project
-
-# Create the hook config
-mkdir -p .claude
-cat > .claude/settings.json << 'EOF'
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /absolute/path/to/permitter/bridge/hook.js"
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
-```
-
-Replace `/absolute/path/to/permitter` with the actual path to your permitter clone.
-
-**Launch Claude Code:**
-
-```bash
+# Launch Claude Code
 claude
 ```
 
-**Make sure the M5Stack is powered on** — it should show the idle screen with a clock and "READY" in the header (or "WAITING" if the bridge isn't reachable yet).
+The first time each tool fires, the M5Stack beeps and shows a permission request. Tap **Trust** to always-allow that tool — future calls will auto-approve with a brief activity flash on screen. Tap **Once** to allow just this call, or **Deny** to block it.
 
-**Ask Claude to do something:**
-
-```
-> read my package.json and tell me what dependencies I have
-```
-
-**What happens next:**
-
-1. Claude decides to use the `Read` tool
-2. Your M5Stack **beeps** and the screen switches to a permission request showing the tool name, action, and risk level
-3. Tap one of the three buttons:
-   - **Trust** (left) — allow this tool forever, won't ask again
-   - **Once** (center) — allow just this one call
-   - **Deny** (right) — block the tool call
-4. The screen flashes "APPROVED" or "DENIED" for a moment, then returns to idle
-5. Claude Code continues immediately with your decision
-
-That's it — every tool call Claude makes now routes through your physical button.
+For tools that also require Claude Code's built-in approval (Bash commands, web fetches), the device shows "ALSO NEEDS TERMINAL APPROVAL" so you know to confirm on the keyboard too.
 
 ## Themes
 
@@ -150,6 +105,15 @@ Three built-in themes, switchable at runtime (long-press the idle screen):
 
 Your theme choice persists across reboots.
 
+## Settings
+
+Long-press the idle screen to open settings:
+
+- **Theme selection** — tap to highlight, tap again to apply
+- **Clock format** — toggle between 12-hour and 24-hour display
+
+All settings persist across reboots.
+
 ## Risk classification
 
 The bridge classifies each request:
@@ -159,6 +123,20 @@ The bridge classifies each request:
 | **High** | Red | `rm`, `sudo`, `curl \| bash`, `DROP TABLE` |
 | **Medium** | Yellow | File writes, `git push`, `Edit`/`Write` tools |
 | **Low** | Green | Read operations, searches, `Glob`, `Grep` |
+
+## Dual approval
+
+Some tool calls trigger both the Permitter device **and** Claude Code's built-in terminal prompt:
+
+| Tool | Permitter only | Also needs terminal |
+|------|:-:|:-:|
+| Read, Grep, Glob | Yes | |
+| Write, Edit | Yes | |
+| Bash (safe) | Yes | |
+| Bash (dangerous) | Yes | Yes |
+| WebFetch, WebSearch | Yes | Yes |
+
+When dual approval is needed, the device shows a warning so you know to check the terminal after tapping.
 
 ## Project structure
 
@@ -178,6 +156,8 @@ permitter/
         theme_terminal.h
         theme_skeuo.h
         theme_brutalist.h
+  setup.sh            # One-command project hookup
+  GUIDE.md            # Step-by-step getting started guide
 ```
 
 ## License

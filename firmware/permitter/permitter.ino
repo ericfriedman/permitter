@@ -16,11 +16,12 @@
 enum TouchZone { ZONE_NONE = 0, ZONE_ALWAYS = 1, ZONE_ONCE = 2, ZONE_DENY = 3 };
 enum State { STATE_IDLE, STATE_PERMISSION, STATE_CONFIRM, STATE_THEME_PICKER, STATE_DISCONNECTED };
 
-// Theme
+// Theme & settings
 Preferences prefs;
 PermitterTheme* theme = nullptr;
 int currentThemeIndex = 0;
 int pickerIndex = 0;
+bool use24Hour = true;
 
 // State
 State state = STATE_IDLE;
@@ -42,6 +43,7 @@ String pendingId = "";
 String pendingTool = "";
 String pendingAction = "";
 String pendingRisk = "";
+bool pendingDual = false;
 
 // --- Network ---
 
@@ -55,7 +57,8 @@ void checkBridgeStatus() {
   http.end();
 }
 
-bool pollPending() {
+// Returns: 0 = nothing, 1 = permission needed, 2 = activity flash
+int pollPending() {
   HTTPClient http;
   String url = String("http://") + BRIDGE_HOST + ":" + BRIDGE_PORT + "/pending";
   http.begin(url);
@@ -64,20 +67,32 @@ bool pollPending() {
   if (code == 200) {
     String body = http.getString();
     http.end();
-    if (body == "null" || body.length() < 5) return false;
+    if (body == "null" || body.length() < 5) return 0;
+
+    // Parse type
+    int typeIdx = body.indexOf("\"type\":\"");
+    String type = "";
+    if (typeIdx >= 0) type = body.substring(typeIdx + 8, body.indexOf("\"", typeIdx + 8));
+
+    // Parse common fields
     int idx;
-    idx = body.indexOf("\"id\":\"");
-    if (idx >= 0) pendingId = body.substring(idx + 6, body.indexOf("\"", idx + 6));
     idx = body.indexOf("\"tool\":\"");
     if (idx >= 0) pendingTool = body.substring(idx + 8, body.indexOf("\"", idx + 8));
     idx = body.indexOf("\"action\":\"");
     if (idx >= 0) pendingAction = body.substring(idx + 10, body.indexOf("\"", idx + 10));
     idx = body.indexOf("\"risk\":\"");
     if (idx >= 0) pendingRisk = body.substring(idx + 8, body.indexOf("\"", idx + 8));
-    return pendingId.length() > 0;
+
+    if (type == "activity") return 2;
+
+    idx = body.indexOf("\"id\":\"");
+    if (idx >= 0) pendingId = body.substring(idx + 6, body.indexOf("\"", idx + 6));
+    idx = body.indexOf("\"dual\":\"");
+    pendingDual = (idx >= 0 && body.substring(idx + 8, idx + 9) == "1");
+    return pendingId.length() > 0 ? 1 : 0;
   }
   http.end();
-  return false;
+  return 0;
 }
 
 void sendResponse(const char* choice) {
@@ -107,41 +122,57 @@ void drawThemePicker() {
 
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(0xFFFF, 0x0000);
-  M5.Display.setCursor(60, 10);
-  M5.Display.print("SELECT THEME");
+  M5.Display.setCursor(80, 10);
+  M5.Display.print("SETTINGS");
 
   M5.Display.drawFastHLine(20, 32, 280, 0x7BEF);
 
+  // Theme rows
   for (int i = 0; i < THEME_COUNT; i++) {
-    int y = 45 + i * 45;
+    int y = 40 + i * 36;
     bool selected = (i == pickerIndex);
 
     if (selected) {
-      M5.Display.fillRect(10, y, 300, 38, 0x2104);
-      M5.Display.drawRect(10, y, 300, 38, 0xFFFF);
+      M5.Display.fillRect(10, y, 300, 32, 0x2104);
+      M5.Display.drawRect(10, y, 300, 32, 0xFFFF);
     } else {
-      M5.Display.drawRect(10, y, 300, 38, 0x4208);
+      M5.Display.drawRect(10, y, 300, 32, 0x4208);
     }
 
     M5.Display.setTextSize(2);
     M5.Display.setTextColor(selected ? 0xFFFF : 0x7BEF, selected ? 0x2104 : 0x0000);
-    M5.Display.setCursor(20, y + 10);
+    M5.Display.setCursor(20, y + 8);
     M5.Display.print(THEME_LABELS[i]);
 
     if (selected) {
       M5.Display.setTextSize(1);
-      M5.Display.setCursor(260, y + 14);
+      M5.Display.setCursor(260, y + 12);
       M5.Display.print("[SET]");
     }
   }
 
+  // Divider
+  int divY = 40 + THEME_COUNT * 36 + 4;
+  M5.Display.drawFastHLine(20, divY, 280, 0x7BEF);
+
+  // Clock format toggle
+  int clockY = divY + 8;
+  M5.Display.fillRect(10, clockY, 300, 32, 0x0000);
+  M5.Display.drawRect(10, clockY, 300, 32, 0x4208);
+  M5.Display.setTextSize(2);
+  M5.Display.setTextColor(0x7BEF, 0x0000);
+  M5.Display.setCursor(20, clockY + 8);
+  M5.Display.printf("Clock: %s", use24Hour ? "24H" : "12H");
+  M5.Display.setTextSize(1);
+  M5.Display.setTextColor(0x4208, 0x0000);
+  M5.Display.setCursor(230, clockY + 12);
+  M5.Display.print("[TOGGLE]");
+
   // Instructions
   M5.Display.setTextSize(1);
   M5.Display.setTextColor(0x7BEF, 0x0000);
-  M5.Display.setCursor(30, 195);
-  M5.Display.print("Tap theme to select. Top area = back.");
-  M5.Display.setCursor(60, 215);
-  M5.Display.print("Long-press idle = picker");
+  M5.Display.setCursor(50, 215);
+  M5.Display.print("Tap to select. Top area = back.");
 }
 
 void switchTheme(int index) {
@@ -163,9 +194,10 @@ void setup() {
   M5.begin(cfg);
   Serial.begin(115200);
 
-  // Load saved theme
+  // Load saved settings
   prefs.begin("permitter", true);
   currentThemeIndex = prefs.getInt("theme", 0);
+  use24Hour = prefs.getBool("24hour", true);
   prefs.end();
   theme = createTheme(currentThemeIndex);
   theme->setup();
@@ -211,8 +243,8 @@ void loop() {
         lastTimeUpdate = millis();
         struct tm timeinfo;
         if (getLocalTime(&timeinfo)) {
-          char ts[9], ds[12];
-          strftime(ts, sizeof(ts), "%H:%M:%S", &timeinfo);
+          char ts[12], ds[12];
+          strftime(ts, sizeof(ts), use24Hour ? "%H:%M:%S" : "%I:%M %p", &timeinfo);
           strftime(ds, sizeof(ds), "%Y-%m-%d", &timeinfo);
           theme->drawClock(ts, ds);
         }
@@ -227,13 +259,18 @@ void loop() {
       // Poll pending
       if (bridgeConnected && millis() - lastPoll > 500) {
         lastPoll = millis();
-        if (pollPending()) {
+        int result = pollPending();
+        if (result == 1) {
+          // Permission needed
           state = STATE_PERMISSION;
-          PermissionRequest req = { pendingTool, pendingAction, pendingRisk, pendingId };
+          PermissionRequest req = { pendingTool, pendingAction, pendingRisk, pendingId, pendingDual };
           theme->playAlertSound();
           theme->drawPermission(req);
           wasTouching = true;
           break;
+        } else if (result == 2) {
+          // Activity flash — trusted tool auto-approved
+          theme->drawActivity(pendingTool.c_str(), pendingAction.c_str());
         }
       }
 
@@ -286,10 +323,9 @@ void loop() {
       if (isTouching && !wasTouching) {
         // Check which theme was tapped
         for (int i = 0; i < THEME_COUNT; i++) {
-          int y = 45 + i * 45;
-          if (t.y >= y && t.y < y + 38 && t.x >= 10 && t.x <= 310) {
+          int y = 40 + i * 36;
+          if (t.y >= y && t.y < y + 32 && t.x >= 10 && t.x <= 310) {
             if (i == pickerIndex) {
-              // Confirm selection
               switchTheme(i);
               state = STATE_IDLE;
               theme->drawIdle(bridgeConnected);
@@ -300,8 +336,18 @@ void loop() {
             break;
           }
         }
-        // Tap above themes = back
-        if (t.y < 40) {
+        // Clock format toggle
+        int clockY = 40 + THEME_COUNT * 36 + 12;
+        if (t.y >= clockY && t.y < clockY + 32 && t.x >= 10 && t.x <= 310) {
+          use24Hour = !use24Hour;
+          prefs.begin("permitter", false);
+          prefs.putBool("24hour", use24Hour);
+          prefs.end();
+          M5.Speaker.tone(500, 50);
+          drawThemePicker();
+        }
+        // Tap above items = back
+        if (t.y < 35) {
           state = STATE_IDLE;
           theme->drawIdle(bridgeConnected);
         }

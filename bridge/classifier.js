@@ -28,4 +28,15 @@ function classifyRisk(tool, action) {
   return "low";
 }
 
-module.exports = { classifyRisk };
+// Tools that also trigger Claude Code's built-in permission prompt
+const DUAL_APPROVAL_TOOLS = new Set([
+  "Bash", "bash",
+  "WebFetch", "Fetch",
+  "WebSearch",
+]);
+
+function needsDualApproval(tool) {
+  return DUAL_APPROVAL_TOOLS.has(tool);
+}
+
+module.exports = { classifyRisk, needsDualApproval };

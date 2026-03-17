@@ -163,6 +163,14 @@ public:
       line++;
     }
 
+    // Dual approval notice
+    if (req.dual) {
+      M5.Display.setTextSize(1);
+      M5.Display.setTextColor(T_AMBER, T_BG);
+      M5.Display.setCursor(40, 118);
+      M5.Display.print(">> ALSO NEEDS TERMINAL APPROVAL <<");
+    }
+
     // Taller zones
     M5.Display.drawFastHLine(0, 128, 320, T_DIM);
     termZone(0, 130, 106, 110, T_DARK, T_GREEN, T_DIM, "TRUST", "[1] always");
@@ -191,6 +199,21 @@ public:
     M5.Display.printf("> %s", tool);
 
     scanlines();
+  }
+
+  void drawActivity(const char* tool, const char* action) override {
+    // Brief flash in the prompt area
+    M5.Display.fillRect(0, 96, 320, 30, T_BG);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(T_DIM, T_BG);
+    M5.Display.setCursor(8, 100);
+    M5.Display.printf("> %s", tool);
+    M5.Display.setTextColor(T_DARK, T_BG);
+    M5.Display.setCursor(8, 114);
+    String a = String(action);
+    if (a.length() > 48) a = a.substring(0, 48);
+    M5.Display.print(a.c_str());
+    scanlines(96, 128);
   }
 
   void playAlertSound() override {

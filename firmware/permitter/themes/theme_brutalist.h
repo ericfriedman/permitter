@@ -171,6 +171,14 @@ public:
       line++;
     }
 
+    // Dual approval notice
+    if (req.dual) {
+      M5.Display.setTextSize(1);
+      M5.Display.setTextColor(B_YELLOW, B_CONCRETE);
+      M5.Display.setCursor(40, 118);
+      M5.Display.print("!! ALSO NEEDS TERMINAL APPROVAL !!");
+    }
+
     // Hazard bar
     hazardBar(124, 6);
 
@@ -205,6 +213,19 @@ public:
       hazardBar(0, 8);
       hazardBar(232, 8);
     }
+  }
+
+  void drawActivity(const char* tool, const char* action) override {
+    // Bold activity bar
+    M5.Display.fillRect(0, 96, 320, 28, B_WHITE);
+    M5.Display.drawRect(0, 96, 320, 28, B_BLACK);
+    M5.Display.drawRect(1, 97, 318, 26, B_BLACK);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(B_BLACK, B_WHITE);
+    M5.Display.setCursor(8, 106);
+    String label = String(tool) + "  " + String(action);
+    if (label.length() > 48) label = label.substring(0, 48);
+    M5.Display.print(label.c_str());
   }
 
   void playAlertSound() override {

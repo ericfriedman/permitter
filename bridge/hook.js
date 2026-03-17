@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Permitter PreToolUse hook
-// Reads tool info from stdin, POSTs to bridge, waits for device response
+// Sends request to bridge, blocks until device responds or bridge auto-approves.
+// Falls back to normal Claude Code prompt if bridge is unreachable.
 
 const http = require("http");
 
@@ -14,8 +15,7 @@ process.stdin.on("end", () => {
   try {
     data = JSON.parse(input);
   } catch {
-    // Can't parse input, allow by default
-    console.log(JSON.stringify({ decision: "allow" }));
+    console.log(JSON.stringify({}));
     return;
   }
 
@@ -56,9 +56,7 @@ process.stdin.on("end", () => {
         try {
           const result = JSON.parse(body);
           const choice = result.choice || "deny";
-          if (choice === "always") {
-            console.log(JSON.stringify({ decision: "allow" }));
-          } else if (choice === "allow") {
+          if (choice === "always" || choice === "allow") {
             console.log(JSON.stringify({ decision: "allow" }));
           } else {
             console.log(JSON.stringify({ decision: "deny" }));

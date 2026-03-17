@@ -121,13 +121,30 @@ Here's what happens:
 2. The hook intercepts the call and sends it to the bridge
 3. The M5Stack **beeps** and shows the permission request — you'll see the tool name, what it's trying to do, and a risk level color (green/yellow/red)
 4. Tap one of the three buttons:
-   - **Left (Trust)** — allow this tool forever for this session
+   - **Left (Trust)** — allow this tool forever for this session. Future calls to this tool will auto-approve with a brief activity flash on screen.
    - **Center (Once)** — allow just this one call
    - **Right (Deny)** — block the call
 5. The screen flashes your decision and returns to idle
 6. Claude Code continues immediately
 
-## Step 6: When you're done
+## Step 6: Understanding dual approval
+
+Some tools (Bash commands, web fetches) also trigger Claude Code's built-in terminal prompt. When this happens, the M5Stack shows **"ALSO NEEDS TERMINAL APPROVAL"** on the permission screen.
+
+For these tools, you approve on the device first, then confirm on the keyboard too. This is by design — dangerous commands get a double-check.
+
+Tools like `Read`, `Write`, `Edit`, `Grep`, and `Glob` only need the device — no terminal prompt.
+
+## Step 7: Settings
+
+Long-press the idle screen to open settings:
+
+- **Theme** — tap to highlight, tap again to apply (Terminal, Skeuo, or Brutalist)
+- **Clock format** — toggle between 12-hour and 24-hour
+
+All settings persist across reboots.
+
+## Step 8: When you're done
 
 Exit Claude Code normally (type `/exit` or Ctrl+C), then stop the bridge:
 
@@ -142,7 +159,7 @@ kill %1
 | `node bridge/index.js &` | Start bridge in background |
 | `claude` | Launch Claude Code (hook activates automatically) |
 | `kill %1` | Stop the bridge when done |
-| Long-press the idle screen | Open theme picker on the device |
+| Long-press the idle screen | Open settings (themes + clock format) |
 
 ## Troubleshooting
 

@@ -8,6 +8,7 @@ struct PermissionRequest {
   String action;
   String risk;  // "low" | "medium" | "high"
   String id;
+  bool dual;    // also needs terminal approval
 };
 
 class PermitterTheme {
@@ -26,6 +27,9 @@ public:
   virtual void drawClock(const char* timeStr, const char* dateStr) = 0;
   virtual void drawPermission(PermissionRequest req) = 0;
   virtual void drawConfirm(bool accepted, const char* tool) = 0;
+
+  // Activity indicator — trusted tool auto-approved
+  virtual void drawActivity(const char* tool, const char* action) = 0;
 
   // Audio + haptics
   virtual void playAlertSound() = 0;

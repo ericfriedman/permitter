@@ -167,6 +167,14 @@ public:
       line++;
     }
 
+    // Dual approval notice
+    if (req.dual) {
+      M5.Display.setTextSize(1);
+      M5.Display.setTextColor(S_AMBER_BTN, S_LINEN);
+      M5.Display.setCursor(50, 122);
+      M5.Display.print("Also needs terminal approval");
+    }
+
     // Felt zone + bigger gel buttons
     M5.Display.fillRect(0, 130, 320, 110, S_FELT);
     M5.Display.drawFastHLine(0, 130, 320, S_SHADOW);
@@ -195,6 +203,19 @@ public:
     M5.Display.setTextColor(S_TEXT_LIGHT, bg);
     M5.Display.setCursor(100, 120);
     M5.Display.print(tool);
+  }
+
+  void drawActivity(const char* tool, const char* action) override {
+    // Subtle notification in the content area
+    M5.Display.fillRect(8, 96, 304, 30, S_LINEN);
+    M5.Display.fillRoundRect(8, 96, 304, 28, 6, S_CHROME);
+    M5.Display.drawRoundRect(8, 96, 304, 28, 6, S_CHROME_HI);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(S_TEXT_DARK, S_CHROME);
+    M5.Display.setCursor(16, 106);
+    String label = String(tool) + "  " + String(action);
+    if (label.length() > 46) label = label.substring(0, 46);
+    M5.Display.print(label.c_str());
   }
 
   void playAlertSound() override {

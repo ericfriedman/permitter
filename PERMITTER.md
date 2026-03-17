@@ -33,7 +33,7 @@ The device vibrates and plays a sound when a request arrives. When idle it runs 
 | Extras | 6-axis IMU, PDM microphone, vibration motor, speaker |
 | Interface | Full touchscreen — no physical buttons |
 
-**Buy:** [M5Stack Core2 V1.1 on Amazon](https://www.amazon.com/M5Stack-Official-Core2-Development-V1-1/dp/B0DQSTJXMC)
+**Buy:** [M5Stack Core2 V1.1 on Amazon](https://amzn.to/4snph8w)
 
 ---
 
@@ -82,10 +82,10 @@ The device vibrates and plays a sound when a request arrives. When idle it runs 
 - Subtle animation defined by theme
 - Long-press anywhere → Theme Picker
 
-### 2. Thinking
-- Claude Code is running but no permission needed yet
-- Activity animation defined by theme
-- Progress indicator
+### 2. Activity Flash
+- Shows when a trusted tool auto-approves
+- Brief display of tool name and action in the idle screen area
+- No user input needed — confirms that trusted tools are running
 
 ### 3. Permission Request
 - Triggered by bridge when Claude Code hits a permission prompt
@@ -95,17 +95,18 @@ The device vibrates and plays a sound when a request arrives. When idle it runs 
   - **Center third** — Class 2 / This Time
   - **Right third** — Class 3 / Deny
 - Risk level (low / medium / high) passed from bridge, affects badge color
+- Dual approval indicator — shows "ALSO NEEDS TERMINAL APPROVAL" for tools that also trigger Claude Code's built-in prompt (Bash, Fetch, WebSearch)
 - Device vibrates on arrival, plays theme alert sound
 
 ### 4. Accepted / Denied
 - Confirmation flash (1.5s) then returns to Idle
 - Theme defines visual and sound for this state
 
-### 5. Theme Picker
+### 5. Settings
 - Triggered by long-press on Idle screen (1.5s hold)
-- Horizontal scroll through installed themes
-- Tap to preview, tap again to confirm
-- Selection saved to flash (persists across reboots)
+- Theme selection — tap to highlight, tap again to confirm
+- Clock format toggle — 12-hour or 24-hour display
+- All settings saved to flash (persist across reboots)
 - No reflash required — fully runtime
 
 ### 6. Disconnected
@@ -178,58 +179,49 @@ permitter -- --model claude-sonnet-4-5   # pass args to claude
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/status` | Heartbeat. Returns `{ connected: true, version: "x.x.x" }` |
-| `GET` | `/pending` | Current permission request or `null` |
-| `POST` | `/respond` | Body: `{ choice: "1" \| "2" \| "deny" }` |
-| `GET` | `/theme` | Currently active theme name |
-| `POST` | `/theme` | Body: `{ theme: "terminal" }` — set active theme |
+| `GET` | `/status` | Heartbeat. Returns `{ connected, version, trusted[] }` |
+| `GET` | `/pending` | Current permission request, activity flash, or `null` |
+| `POST` | `/request` | Hook sends permission request, blocks until device responds |
+| `POST` | `/respond` | Device sends choice: `{ choice: "always" \| "allow" \| "deny" }` |
 
 ### `/pending` Response Shape
 
 ```json
+// Permission request (needs device approval)
 {
+  "type": "permission",
   "id": "1718123456789",
   "tool": "Bash",
   "action": "git push origin main --force",
   "risk": "high",
-  "context": "Detected in: /Users/eric/projects/graph-agent",
+  "dual": "1",
   "timestamp": "2025-03-16T14:22:01Z"
 }
+
+// Activity flash (trusted tool, auto-approved)
+{
+  "type": "activity",
+  "tool": "Read",
+  "action": "/path/to/file",
+  "risk": "low",
+  "timestamp": "2025-03-16T14:22:02Z"
+}
+
+// Nothing pending
+null
 ```
 
-### Permission Prompt Detection
+### Hook Integration
 
-Claude Code outputs permission prompts to stdout in this format *(to be confirmed with live capture)*:
+Uses Claude Code's `PreToolUse` hook system — no stdout parsing or process wrapping.
 
-```
-╭─────────────────────────────────────────────────────╮
-│ Claude wants to execute a bash command               │
-│                                                      │
-│   git push origin main --force                       │
-│                                                      │
-│ Do you want to allow this? [y/n/always]              │
-╰─────────────────────────────────────────────────────╯
-```
+The hook (`bridge/hook.js`) receives tool info on stdin as JSON, POSTs to the bridge's `/request` endpoint, and blocks until the device responds. Returns `{"decision": "allow"}` or `{"decision": "deny"}` to Claude Code.
 
-**TODO:** Capture exact stdout from a live Claude Code session and lock the regex in `bridge/detector.js`. The box-drawing characters and prompt format may vary across Claude Code versions.
+### Trusted Tool Memory
 
-Detection strategy:
-1. Buffer stdout line by line
-2. Look for the box-drawing open pattern `╭` or `┌`
-3. Capture until closing `╰` or `└`
-4. Extract tool name and command from captured block
-5. Classify risk
-6. Hold as `pending` — do NOT forward the `[y/n/always]` prompt to the terminal yet
+When the user taps "Trust" on the device, the bridge adds that tool to an in-memory trusted set. Future calls to trusted tools are auto-approved instantly — the hook returns immediately and the device shows a brief activity flash.
 
-### Response Handling
-
-```
-Choice "1" (Trust Always) → write "always\n" to claude stdin
-Choice "2" (This Time)    → write "y\n" to claude stdin
-Choice "deny"             → write "n\n" to claude stdin
-```
-
-After responding, clear `pending` to `null`.
+The trusted set resets when the bridge restarts (per-session).
 
 ---
 
@@ -338,31 +330,29 @@ struct PermissionRequest {
   String action;
   String risk;   // "low" | "medium" | "high"
   String id;
+  bool dual;     // also needs terminal approval
 };
 
 class PermitterTheme {
 public:
   virtual const char* name() = 0;         // "terminal"
   virtual const char* displayName() = 0;  // "Terminal"
-  virtual const char* description() = 0;  // "CRT phosphor green"
 
   // Called once when theme is activated
   virtual void setup() = 0;
 
-  // Screen renderers — called in loop()
-  virtual void drawIdle(bool bridgeConnected, String timeStr) = 0;
-  virtual void drawThinking() = 0;
+  // Screen renderers
+  virtual void drawBoot(const char* ssid) = 0;
+  virtual void drawBootStatus(bool wifiOk, const char* ip) = 0;
+  virtual void drawIdle(bool bridgeConnected) = 0;
+  virtual void drawClock(const char* timeStr, const char* dateStr) = 0;
   virtual void drawPermission(PermissionRequest req) = 0;
-  virtual void drawConfirm(bool accepted) = 0;
-  virtual void drawDisconnected() = 0;
-  virtual void drawThemePickerCard(bool selected) = 0; // thumbnail for picker
+  virtual void drawConfirm(bool accepted, const char* tool) = 0;
+  virtual void drawActivity(const char* tool, const char* action) = 0;
 
-  // Audio + haptics — implement or leave empty
+  // Audio
   virtual void playAlertSound() = 0;
-  virtual void playConfirmSound() = 0;
-  virtual void playDenySound() = 0;
-  virtual void alertVibration() = 0;
-  virtual void confirmVibration() = 0;
+  virtual void playConfirmSound(bool accepted) = 0;
 };
 ```
 
@@ -510,9 +500,13 @@ node index.js              # same thing
 - [x] Firmware implementation — core loop (WiFi, touch, bridge polling, permission flow)
 - [x] Claude Code PreToolUse hook integration — end-to-end working
 - [x] End-to-end test on physical device — M5Stack Core2 V1.1 confirmed working
-- [ ] Theme implementations — Terminal, Skeuo, Brutalist
-- [ ] Runtime theme picker screen
-- [ ] README + setup docs
+- [x] Theme implementations — Terminal, Skeuo, Brutalist (all three complete)
+- [x] Runtime theme picker / settings screen
+- [x] 12/24-hour clock toggle
+- [x] Trusted tool memory — tap Trust once, tool auto-approves with activity flash
+- [x] Dual approval detection — warns when terminal approval also needed
+- [x] README + setup docs + GUIDE.md
+- [x] setup.sh — one-command project hookup
 - [ ] npm package for bridge (`npx permitter`)
 - [ ] permitter.app microsite
 - [ ] v1.0 release
