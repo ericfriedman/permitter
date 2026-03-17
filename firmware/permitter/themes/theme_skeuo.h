@@ -94,11 +94,11 @@ public:
     M5.Display.setCursor(260, 10);
     M5.Display.print(bridgeConnected ? "Ready" : "Wait");
 
-    // Subtle label
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(S_SHADOW, S_LINEN);
-    M5.Display.setCursor(80, 118);
-    M5.Display.print("Waiting for requests...");
+    // Subtle label — larger
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(S_TEXT_DARK, S_LINEN);
+    M5.Display.setCursor(56, 108);
+    M5.Display.print("Standing by...");
 
     // Felt texture zone area — taller
     M5.Display.fillRect(0, 130, 320, 110, S_FELT);
@@ -111,7 +111,7 @@ public:
   }
 
   void drawClock(const char* timeStr, const char* dateStr) override {
-    M5.Display.fillRect(0, 30, 320, 85, S_LINEN);
+    M5.Display.fillRect(0, 30, 320, 64, S_LINEN);
 
     // Time - smaller, elegant
     M5.Display.setTextSize(3);
@@ -153,15 +153,15 @@ public:
     M5.Display.fillRoundRect(8, 34, 304, 88, 8, S_TEXT_LIGHT);
     M5.Display.drawRoundRect(8, 34, 304, 88, 8, S_CHROME);
 
-    // Action text
-    M5.Display.setTextSize(1);
+    // Action text — larger
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(S_TEXT_DARK, S_TEXT_LIGHT);
     String a = req.action;
     int line = 0, pos = 0;
-    while (pos < (int)a.length() && line < 6) {
-      int end = pos + 46;
+    while (pos < (int)a.length() && line < 3) {
+      int end = pos + 24;
       if (end > (int)a.length()) end = a.length();
-      M5.Display.setCursor(16, 42 + line * 12);
+      M5.Display.setCursor(16, 42 + line * 22);
       M5.Display.print(a.substring(pos, end).c_str());
       pos = end;
       line++;
@@ -169,10 +169,10 @@ public:
 
     // Dual approval notice
     if (req.dual) {
-      M5.Display.setTextSize(1);
-      M5.Display.setTextColor(S_AMBER_BTN, S_LINEN);
-      M5.Display.setCursor(50, 122);
-      M5.Display.print("Also needs terminal approval");
+      M5.Display.setTextSize(2);
+      M5.Display.setTextColor(S_RED_BTN, S_LINEN);
+      M5.Display.setCursor(10, 116);
+      M5.Display.print("+ Terminal approve");
     }
 
     // Felt zone + bigger gel buttons
@@ -205,16 +205,45 @@ public:
     M5.Display.print(tool);
   }
 
+  void drawStatusBar(const char* state, int agents, int uptime) override {
+    M5.Display.fillRect(0, 96, 320, 30, S_LINEN);
+
+    // Status pill — larger
+    uint16_t pillColor = S_CHROME;
+    if (strcmp(state, "working") == 0) pillColor = S_GREEN_BTN;
+    if (strcmp(state, "waiting") == 0) pillColor = S_AMBER_BTN;
+    M5.Display.fillRoundRect(4, 97, 120, 26, 8, pillColor);
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(S_TEXT_LIGHT, pillColor);
+    M5.Display.setCursor(10, 101);
+    if (strcmp(state, "working") == 0) M5.Display.print("Working");
+    else if (strcmp(state, "waiting") == 0) M5.Display.print("Waiting");
+    else M5.Display.print(" Idle");
+
+    // Agents + uptime — larger
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(S_TEXT_DARK, S_LINEN);
+    int m = uptime / 60;
+    int s = uptime % 60;
+    if (agents > 0) {
+      M5.Display.setCursor(130, 101);
+      M5.Display.printf("%d agt %dm%02ds", agents, m, s);
+    } else {
+      M5.Display.setCursor(170, 101);
+      M5.Display.printf("%dm%02ds", m, s);
+    }
+  }
+
   void drawActivity(const char* tool, const char* action) override {
-    // Subtle notification in the content area
-    M5.Display.fillRect(8, 96, 304, 30, S_LINEN);
-    M5.Display.fillRoundRect(8, 96, 304, 28, 6, S_CHROME);
-    M5.Display.drawRoundRect(8, 96, 304, 28, 6, S_CHROME_HI);
-    M5.Display.setTextSize(1);
+    // Notification in the content area — larger
+    M5.Display.fillRect(4, 96, 312, 30, S_LINEN);
+    M5.Display.fillRoundRect(4, 96, 312, 28, 6, S_CHROME);
+    M5.Display.drawRoundRect(4, 96, 312, 28, 6, S_CHROME_HI);
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(S_TEXT_DARK, S_CHROME);
-    M5.Display.setCursor(16, 106);
-    String label = String(tool) + "  " + String(action);
-    if (label.length() > 46) label = label.substring(0, 46);
+    M5.Display.setCursor(8, 101);
+    String label = String(tool) + " " + String(action);
+    if (label.length() > 26) label = label.substring(0, 26);
     M5.Display.print(label.c_str());
   }
 

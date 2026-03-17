@@ -40,35 +40,43 @@ The device vibrates and plays a sound when a request arrives. When idle it runs 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│  Mac                                │
-│                                     │
-│  claude (CLI process)               │
-│      │ PreToolUse hook              │
-│      ▼                              │
-│  hook.js → POST /request            │
-│      │ blocks until response        │
-│      │                              │
-│  Permitter Bridge (Node.js :3737)   │
-│      │ holds pending request        │
-│      │ serves /pending to device    │
-│      │ receives /respond from device│
-│      │ returns choice to hook       │
-└──────┼──────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  Mac                                         │
+│                                              │
+│  claude (CLI process)                        │
+│      │ 7 hooks:                              │
+│      │  PreToolUse      → hook.js            │
+│      │  PermissionRequest → hook-permission.js│
+│      │  PostToolUse     → hook-status.js     │
+│      │  SubagentStart   → hook-status.js     │
+│      │  SubagentStop    → hook-status.js     │
+│      │  Stop            → hook-status.js     │
+│      │  Notification    → hook-status.js     │
+│      ▼                                       │
+│  Permitter Bridge (Node.js :3737)            │
+│      │ POST /request  — blocks for approval  │
+│      │ POST /event    — status tracking      │
+│      │ GET  /pending  — device polls this    │
+│      │ POST /respond  — device sends choice  │
+│      │ GET  /status   — heartbeat + state    │
+└──────┼───────────────────────────────────────┘
        │ WiFi (local network)
-┌──────┼──────────────────────────────┐
-│  M5Stack Core2                      │
-│      │ polls /pending every 500ms   │
-│      │ renders Permission screen    │
-│      │ user taps zone               │
-│      ▼                              │
-│  POST /respond { choice }           │
-└─────────────────────────────────────┘
+┌──────┼───────────────────────────────────────┐
+│  M5Stack Core2                               │
+│      │ polls /pending every 500ms            │
+│      │ polls /status every 5s                │
+│      │ renders Permission / Status screens   │
+│      │ user taps zone                        │
+│      ▼                                       │
+│  POST /respond { choice }                    │
+└──────────────────────────────────────────────┘
 ```
 
 **Key principles:**
 - Uses Claude Code's hooks system — no stdout parsing, no process wrapping.
 - Hook script blocks until device responds, then returns allow/deny to Claude Code.
+- Status hooks fire-and-forget — don't block Claude.
+- Solo mode pre-allows Bash/WebFetch/WebSearch so the device is the sole gatekeeper.
 - All Claude Code config lives on the Mac. The device is display + input only.
 - WiFi required for companion mode. Device falls back to clock/idle without it.
 
@@ -179,10 +187,11 @@ permitter -- --model claude-sonnet-4-5   # pass args to claude
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/status` | Heartbeat. Returns `{ connected, version, trusted[] }` |
+| `GET` | `/status` | Heartbeat. Returns `{ connected, version, trusted[], agents, state, uptime }` |
 | `GET` | `/pending` | Current permission request, activity flash, or `null` |
 | `POST` | `/request` | Hook sends permission request, blocks until device responds |
 | `POST` | `/respond` | Device sends choice: `{ choice: "always" \| "allow" \| "deny" }` |
+| `POST` | `/event` | Status hooks send lifecycle events (PostToolUse, SubagentStart/Stop, Stop, Notification) |
 
 ### `/pending` Response Shape
 
@@ -213,15 +222,27 @@ null
 
 ### Hook Integration
 
-Uses Claude Code's `PreToolUse` hook system — no stdout parsing or process wrapping.
+Uses Claude Code's hooks system with 7 hook types — no stdout parsing or process wrapping.
 
-The hook (`bridge/hook.js`) receives tool info on stdin as JSON, POSTs to the bridge's `/request` endpoint, and blocks until the device responds. Returns `{"decision": "allow"}` or `{"decision": "deny"}` to Claude Code.
+| Hook | Script | Behavior |
+|------|--------|----------|
+| `PreToolUse` | `hook.js` | Blocks until device approves/denies. Auto-approves trusted tools. |
+| `PermissionRequest` | `hook-permission.js` | Auto-approves Claude Code's built-in prompt for trusted tools (solo mode). |
+| `PostToolUse` | `hook-status.js` | Fire-and-forget. Tracks tool completions. |
+| `SubagentStart` | `hook-status.js` | Fire-and-forget. Tracks active agents. |
+| `SubagentStop` | `hook-status.js` | Fire-and-forget. Tracks active agents. |
+| `Stop` | `hook-status.js` | Fire-and-forget. Detects when Claude finishes. |
+| `Notification` | `hook-status.js` | Fire-and-forget. Catches attention-needed events. |
 
 ### Trusted Tool Memory
 
 When the user taps "Trust" on the device, the bridge adds that tool to an in-memory trusted set. Future calls to trusted tools are auto-approved instantly — the hook returns immediately and the device shows a brief activity flash.
 
 The trusted set resets when the bridge restarts (per-session).
+
+### Solo Mode
+
+In solo mode, `.claude/settings.local.json` pre-allows `Bash(*)`, `WebFetch(*)`, and `WebSearch(*)`, which bypasses Claude Code's built-in keyboard prompt. The PreToolUse hook still fires first, so the M5Stack remains the sole gatekeeper. Toggle with `permitter solo` / `permitter dual`.
 
 ---
 
@@ -406,44 +427,31 @@ See `themes/README.md` for detailed guidance, M5Stack drawing API reference, and
 
 ```
 permitter/
+├── permitter                      ← CLI: setup, start, stop, solo/dual
 ├── README.md
+├── GUIDE.md                       ← step-by-step getting started
+├── PERMITTER.md                   ← this file (design spec)
 ├── LICENSE                        ← MIT
-├── CONTRIBUTING.md
 │
-├── bridge/                        ← Node.js bridge server
-│   ├── package.json
-│   ├── index.js                   ← main entry, spawns claude, HTTP server
-│   ├── detector.js                ← stdout pattern matcher
-│   ├── classifier.js              ← risk classification logic
-│   └── README.md
+├── bridge/                        ← Node.js bridge server + hooks
+│   ├── index.js                   ← HTTP server (v0.4.0)
+│   ├── hook.js                    ← PreToolUse hook (blocks for approval)
+│   ├── hook-permission.js         ← PermissionRequest hook (auto-approve trusted)
+│   ├── hook-status.js             ← Status hooks (fire-and-forget)
+│   └── classifier.js              ← risk classification logic
 │
-├── firmware/
-│   └── permitter/
-│       ├── permitter.ino          ← main sketch
-│       ├── theme_interface.h      ← PermitterTheme base class
-│       ├── theme_registry.h       ← theme list + factory
-│       ├── config.example.h       ← copy to config.h and fill in
-│       ├── config.h               ← gitignored
-│       │
-│       └── themes/
-│           ├── README.md          ← how to build a theme
-│           ├── theme_terminal.h
-│           ├── theme_skeuo.h
-│           └── theme_brutalist.h
-│
-├── designer/                      ← React UI design tool
-│   ├── src/
-│   │   ├── themes/
-│   │   │   ├── terminal.jsx
-│   │   │   ├── skeuo.jsx
-│   │   │   └── brutalist.jsx
-│   │   └── App.jsx
-│   └── package.json
-│
-└── docs/
-    ├── setup.md                   ← getting started guide
-    ├── themes.md                  ← theme contributor guide
-    └── bridge.md                  ← bridge server deep-dive
+└── firmware/
+    └── permitter/
+        ├── permitter.ino          ← main sketch
+        ├── theme_interface.h      ← PermitterTheme base class
+        ├── theme_registry.h       ← theme list + factory
+        ├── config.example.h       ← copy to config.h and fill in
+        ├── config.h               ← gitignored
+        │
+        └── themes/
+            ├── theme_terminal.h
+            ├── theme_skeuo.h
+            └── theme_brutalist.h
 ```
 
 ---
@@ -505,8 +513,11 @@ node index.js              # same thing
 - [x] 12/24-hour clock toggle
 - [x] Trusted tool memory — tap Trust once, tool auto-approves with activity flash
 - [x] Dual approval detection — warns when terminal approval also needed
+- [x] Solo mode — M5Stack as sole approver, no keyboard prompts
+- [x] Live status display — Working/Idle/Waiting, agents, uptime on device
+- [x] 7 hooks — PreToolUse, PermissionRequest, PostToolUse, SubagentStart/Stop, Stop, Notification
+- [x] `permitter` CLI — setup, start, stop, solo/dual toggle
 - [x] README + setup docs + GUIDE.md
-- [x] setup.sh — one-command project hookup
 - [ ] npm package for bridge (`npx permitter`)
 - [ ] permitter.app microsite
 - [ ] v1.0 release

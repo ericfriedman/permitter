@@ -11,6 +11,11 @@ let waiters = [];
 const trustedTools = new Set();
 // Last activity for the device to display
 let lastActivity = null;
+// Live status tracking
+const sessionStart = Date.now();
+let activeAgents = new Map(); // agentId -> { type, startTime }
+let lastToolCompleted = null;
+let claudeState = "idle"; // "idle", "working", "waiting"
 
 function resolveWaiters(choice) {
   const cbs = waiters;
@@ -36,8 +41,16 @@ const server = http.createServer((req, res) => {
     return res.end(
       JSON.stringify({
         connected: true,
-        version: "0.3.0",
+        version: "0.4.0",
         trusted: [...trustedTools],
+        agents: activeAgents.size,
+        agentList: [...activeAgents.values()].map(a => ({
+          type: a.type,
+          elapsed: Math.round((Date.now() - a.startTime) / 1000)
+        })),
+        state: claudeState,
+        lastTool: lastToolCompleted,
+        uptime: Math.round((Date.now() - sessionStart) / 1000),
       })
     );
   }
@@ -137,6 +150,51 @@ const server = http.createServer((req, res) => {
         console.log(`[RESPONSE] ${choice}`);
         pending = null;
         resolveWaiters(choice === "always" ? "allow" : choice);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+    });
+    return;
+  }
+
+  // POST /event — status hooks send lifecycle events
+  if (req.method === "POST" && url.pathname === "/event") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const data = JSON.parse(body);
+        const event = data.event;
+
+        if (event === "PostToolUse" || event === "PostToolUseFailure") {
+          claudeState = "working";
+          lastToolCompleted = {
+            tool: data.tool,
+            success: data.success,
+            timestamp: new Date().toISOString(),
+          };
+          console.log(`[STATUS] ${data.tool} ${data.success ? "OK" : "FAIL"}`);
+        } else if (event === "SubagentStart") {
+          activeAgents.set(data.agentId, {
+            type: data.agentType,
+            startTime: Date.now(),
+          });
+          claudeState = "working";
+          console.log(`[AGENT+] ${data.agentType} (${activeAgents.size} active)`);
+        } else if (event === "SubagentStop") {
+          activeAgents.delete(data.agentId);
+          console.log(`[AGENT-] ${data.agentType} (${activeAgents.size} active)`);
+        } else if (event === "Stop") {
+          claudeState = "idle";
+          console.log(`[STOP] Claude finished`);
+        } else if (event === "Notification") {
+          claudeState = "waiting";
+          console.log(`[NOTIFY] ${data.message}`);
+        }
+
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {

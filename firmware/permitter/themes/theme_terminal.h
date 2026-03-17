@@ -14,12 +14,12 @@
 class TerminalTheme : public PermitterTheme {
 private:
   void scanlines() {
-    for (int y = 0; y < 240; y += 4)
+    for (int y = 0; y < 240; y += 8)
       M5.Display.drawFastHLine(0, y, 320, T_DARK);
   }
 
   void scanlines(int y0, int y1) {
-    for (int y = y0; y < y1; y += 4)
+    for (int y = y0; y < y1; y += 8)
       M5.Display.drawFastHLine(0, y, 320, T_DARK);
   }
 
@@ -90,11 +90,11 @@ public:
     M5.Display.setCursor(248, 5);
     M5.Display.print(st);
 
-    // Prompt
-    M5.Display.setTextSize(1);
+    // Prompt — larger
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(T_DIM, T_BG);
-    M5.Display.setCursor(8, 115);
-    M5.Display.print("> awaiting permission request_");
+    M5.Display.setCursor(16, 108);
+    M5.Display.print("> standing by_");
 
     // Taller bottom zones starting at y=130
     M5.Display.drawFastHLine(0, 128, 320, T_DIM);
@@ -106,7 +106,7 @@ public:
   }
 
   void drawClock(const char* timeStr, const char* dateStr) override {
-    M5.Display.fillRect(0, 22, 320, 88, T_BG);
+    M5.Display.fillRect(0, 22, 320, 72, T_BG);
 
     // Big time
     M5.Display.setTextSize(4);
@@ -149,15 +149,15 @@ public:
 
     M5.Display.drawFastHLine(8, 50, 304, T_DIM);
 
-    // Action — fewer lines to make room for bigger buttons
-    M5.Display.setTextSize(1);
+    // Action — larger text
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(T_GREEN, T_BG);
     String a = req.action;
     int line = 0, pos = 0;
-    while (pos < (int)a.length() && line < 5) {
-      int end = pos + 48;
+    while (pos < (int)a.length() && line < 3) {
+      int end = pos + 24;
       if (end > (int)a.length()) end = a.length();
-      M5.Display.setCursor(8, 56 + line * 12);
+      M5.Display.setCursor(8, 54 + line * 22);
       M5.Display.print(a.substring(pos, end).c_str());
       pos = end;
       line++;
@@ -165,10 +165,10 @@ public:
 
     // Dual approval notice
     if (req.dual) {
-      M5.Display.setTextSize(1);
+      M5.Display.setTextSize(2);
       M5.Display.setTextColor(T_AMBER, T_BG);
-      M5.Display.setCursor(40, 118);
-      M5.Display.print(">> ALSO NEEDS TERMINAL APPROVAL <<");
+      M5.Display.setCursor(10, 116);
+      M5.Display.print("+ TERMINAL APPROVE");
     }
 
     // Taller zones
@@ -201,19 +201,44 @@ public:
     scanlines();
   }
 
+  void drawStatusBar(const char* state, int agents, int uptime) override {
+    M5.Display.fillRect(0, 96, 320, 30, T_BG);
+
+    // State indicator — larger
+    uint16_t sc = T_DIM;
+    if (strcmp(state, "working") == 0) sc = T_GREEN;
+    if (strcmp(state, "waiting") == 0) sc = T_AMBER;
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(sc, T_BG);
+    M5.Display.setCursor(4, 98);
+    if (strcmp(state, "working") == 0) M5.Display.print(">WORKING");
+    else if (strcmp(state, "waiting") == 0) M5.Display.print(">WAITING");
+    else M5.Display.print(">IDLE");
+
+    // Agents + uptime
+    M5.Display.setTextColor(T_DIM, T_BG);
+    int m = uptime / 60;
+    int s = uptime % 60;
+    if (agents > 0) {
+      M5.Display.setCursor(140, 98);
+      M5.Display.printf("%d agt %dm%02ds", agents, m, s);
+    } else {
+      M5.Display.setCursor(180, 98);
+      M5.Display.printf("%dm%02ds", m, s);
+    }
+    // No scanlines here — readability over aesthetics
+  }
+
   void drawActivity(const char* tool, const char* action) override {
     // Brief flash in the prompt area
     M5.Display.fillRect(0, 96, 320, 30, T_BG);
-    M5.Display.setTextSize(1);
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(T_DIM, T_BG);
-    M5.Display.setCursor(8, 100);
-    M5.Display.printf("> %s", tool);
-    M5.Display.setTextColor(T_DARK, T_BG);
-    M5.Display.setCursor(8, 114);
-    String a = String(action);
-    if (a.length() > 48) a = a.substring(0, 48);
-    M5.Display.print(a.c_str());
-    scanlines(96, 128);
+    M5.Display.setCursor(4, 100);
+    String label = String("> ") + String(tool) + " " + String(action);
+    if (label.length() > 26) label = label.substring(0, 26);
+    M5.Display.print(label.c_str());
+    // No scanlines here — readability over aesthetics
   }
 
   void playAlertSound() override {

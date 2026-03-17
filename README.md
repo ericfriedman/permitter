@@ -21,12 +21,47 @@ If the bridge is unreachable, the hook falls back to Claude Code's normal termin
 ## Features
 
 - **Three response options** — Trust (always allow this tool), Once (allow this call), Deny (block it)
-- **Trusted tool memory** — tap Trust once and that tool auto-approves for the rest of the session, with a brief activity flash on screen so you can see what's running
-- **Dual approval detection** — some tools (Bash, Fetch, WebSearch) also trigger Claude Code's built-in terminal prompt. The device warns you with "ALSO NEEDS TERMINAL APPROVAL" so you know to check your keyboard too
+- **Trusted tool memory** — tap Trust once and that tool auto-approves for the rest of the session, with a brief activity flash on screen
+- **Solo mode** — M5Stack becomes the sole approver. No keyboard prompts. Toggle between solo and dual mode with one command
+- **Live status display** — device shows Claude's current state (Working/Idle/Waiting), session uptime, and active agent count
 - **Risk classification** — requests are color-coded by risk level (red/yellow/green)
 - **Three themes** — Terminal (CRT green), Skeuo (iOS 6), Brutalist (concrete/hazard). Switchable at runtime, persists across reboots
 - **12/24-hour clock** — toggle in settings, persists across reboots
+- **7 hooks** — PreToolUse, PermissionRequest, PostToolUse, SubagentStart/Stop, Stop, Notification
 - **Graceful fallback** — if the bridge is down, Claude Code falls back to its normal terminal prompt
+
+## Quick start
+
+```bash
+git clone https://github.com/ericfriedman/permitter.git
+export PATH="$PATH:$(pwd)/permitter"
+
+# Flash the M5Stack (see Setup below), then:
+cd your-project
+permitter setup
+permitter start
+claude
+```
+
+## The `permitter` command
+
+Run from inside any project directory:
+
+| Command | What it does |
+|---------|-------------|
+| `permitter setup` | Install hooks + solo mode (M5Stack is sole approver) |
+| `permitter solo` | Switch to solo mode (no keyboard prompts) |
+| `permitter dual` | Switch to dual mode (device + keyboard prompts) |
+| `permitter start` | Start the bridge server |
+| `permitter stop` | Stop the bridge server |
+| `permitter status` | Show bridge connection status |
+| `permitter off` | Remove all hooks and permissions |
+
+### Solo vs Dual mode
+
+**Solo mode** (default) — the M5Stack is the only approver. Bash, WebFetch, and WebSearch are pre-allowed in Claude Code's permission system, so its built-in keyboard prompt is skipped. The PreToolUse hook still fires first, so the device remains the gatekeeper.
+
+**Dual mode** — both the M5Stack and Claude Code's keyboard prompt are active. Some tools (Bash, WebFetch, WebSearch) will require approval on both the device and the terminal.
 
 ## Setup
 
@@ -59,41 +94,23 @@ Find your serial port with `ls /dev/cu.usb*` (macOS) or `ls /dev/ttyUSB*` (Linux
 
 Find your local IP with `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux).
 
-### 2. Start the bridge server
-
-```bash
-cd bridge
-node index.js
-```
-
-The bridge listens on port 3737 by default. Set `PERMITTER_PORT` env var to change it.
-
-### 3. Hook up your project
-
-From your project directory, run the setup script:
+### 2. Hook up your project
 
 ```bash
 cd ~/my-project
-bash /path/to/permitter/setup.sh
+permitter setup
 ```
 
-This creates `.claude/settings.json` with the hook pointing at `hook.js`. The path is resolved automatically.
+This creates `.claude/settings.json` with all 7 hooks and `.claude/settings.local.json` with solo mode permissions. Paths are resolved automatically.
 
-Or to enable for **all** projects, put the generated config in `~/.claude/settings.json`.
-
-### 4. Use it
+### 3. Use it
 
 ```bash
-# Start the bridge in the background
-node /path/to/permitter/bridge/index.js &
-
-# Launch Claude Code
+permitter start
 claude
 ```
 
-The first time each tool fires, the M5Stack beeps and shows a permission request. Tap **Trust** to always-allow that tool — future calls will auto-approve with a brief activity flash on screen. Tap **Once** to allow just this call, or **Deny** to block it.
-
-For tools that also require Claude Code's built-in approval (Bash commands, web fetches), the device shows "ALSO NEEDS TERMINAL APPROVAL" so you know to confirm on the keyboard too.
+The first time each tool fires, the M5Stack beeps and shows a permission request. Tap **Trust** to always-allow that tool — future calls auto-approve with an activity flash. Tap **Once** to allow just this call, or **Deny** to block it.
 
 ## Themes
 
@@ -114,6 +131,18 @@ Long-press the idle screen to open settings:
 
 All settings persist across reboots.
 
+## Live status
+
+The device shows Claude's current state in real-time:
+
+| State | Meaning |
+|-------|---------|
+| **WORKING** | Claude is actively using tools |
+| **WAITING** | Claude is waiting for your input |
+| **IDLE** | No active session or between tasks |
+
+Also displays session uptime and active agent count when subagents are running.
+
 ## Risk classification
 
 The bridge classifies each request:
@@ -124,31 +153,20 @@ The bridge classifies each request:
 | **Medium** | Yellow | File writes, `git push`, `Edit`/`Write` tools |
 | **Low** | Green | Read operations, searches, `Glob`, `Grep` |
 
-## Dual approval
-
-Some tool calls trigger both the Permitter device **and** Claude Code's built-in terminal prompt:
-
-| Tool | Permitter only | Also needs terminal |
-|------|:-:|:-:|
-| Read, Grep, Glob | Yes | |
-| Write, Edit | Yes | |
-| Bash (safe) | Yes | |
-| Bash (dangerous) | Yes | Yes |
-| WebFetch, WebSearch | Yes | Yes |
-
-When dual approval is needed, the device shows a warning so you know to check the terminal after tapping.
-
 ## Project structure
 
 ```
 permitter/
+  permitter            # CLI — setup, start, stop, solo/dual toggle
   bridge/
-    index.js          # HTTP bridge server
-    hook.js           # Claude Code PreToolUse hook
-    classifier.js     # Risk classification logic
+    index.js           # HTTP bridge server (v0.4.0)
+    hook.js            # PreToolUse hook — device approval
+    hook-permission.js # PermissionRequest hook — auto-approve trusted tools
+    hook-status.js     # Status hooks — PostToolUse, SubagentStart/Stop, Stop, Notification
+    classifier.js      # Risk classification logic
   firmware/
     permitter/
-      permitter.ino   # Main firmware sketch
+      permitter.ino    # Main firmware sketch
       config.example.h
       theme_interface.h
       theme_registry.h
@@ -156,8 +174,7 @@ permitter/
         theme_terminal.h
         theme_skeuo.h
         theme_brutalist.h
-  setup.sh            # One-command project hookup
-  GUIDE.md            # Step-by-step getting started guide
+  GUIDE.md             # Step-by-step getting started guide
 ```
 
 ## License

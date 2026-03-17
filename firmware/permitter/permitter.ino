@@ -45,6 +45,12 @@ String pendingAction = "";
 String pendingRisk = "";
 bool pendingDual = false;
 
+// Claude status from bridge
+int activeAgents = 0;
+String claudeState = "idle";  // "idle", "working", "waiting"
+String lastCompletedTool = "";
+int sessionUptime = 0;
+
 // --- Network ---
 
 void checkBridgeStatus() {
@@ -54,6 +60,24 @@ void checkBridgeStatus() {
   http.setTimeout(2000);
   int code = http.GET();
   bridgeConnected = (code == 200);
+  if (code == 200) {
+    String body = http.getString();
+    int idx;
+    idx = body.indexOf("\"agents\":");
+    if (idx >= 0) {
+      int end = body.indexOf(",", idx + 9);
+      if (end > idx) activeAgents = body.substring(idx + 9, end).toInt();
+    }
+    idx = body.indexOf("\"state\":\"");
+    if (idx >= 0) claudeState = body.substring(idx + 9, body.indexOf("\"", idx + 9));
+    idx = body.indexOf("\"uptime\":");
+    if (idx >= 0) {
+      int end = body.indexOf("}", idx + 9);
+      int comma = body.indexOf(",", idx + 9);
+      if (comma > 0 && comma < end) end = comma;
+      if (end > idx) sessionUptime = body.substring(idx + 9, end).toInt();
+    }
+  }
   http.end();
 }
 
@@ -254,6 +278,7 @@ void loop() {
       if (wifiConnected && millis() - lastStatusCheck > 5000) {
         lastStatusCheck = millis();
         checkBridgeStatus();
+        theme->drawStatusBar(claudeState.c_str(), activeAgents, sessionUptime);
       }
 
       // Poll pending

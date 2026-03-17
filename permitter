@@ -1,0 +1,216 @@
+#!/bin/bash
+# Permitter — physical permission panel for Claude Code
+# https://github.com/ericfriedman/permitter
+#
+# Usage (run from inside any project directory):
+#   permitter setup         Install hooks + start bridge (solo mode by default)
+#   permitter solo          M5Stack is sole approver (no keyboard prompts)
+#   permitter dual          Device + keyboard prompts
+#   permitter start         Start the bridge server
+#   permitter stop          Stop the bridge server
+#   permitter status        Show bridge status
+#   permitter off           Remove all hooks and permissions
+#
+# First time:
+#   git clone https://github.com/ericfriedman/permitter.git
+#   export PATH="$PATH:$(pwd)/permitter"
+#   cd your-project
+#   permitter setup
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOOK_JS="$SCRIPT_DIR/bridge/hook.js"
+HOOK_PERM="$SCRIPT_DIR/bridge/hook-permission.js"
+HOOK_STATUS="$SCRIPT_DIR/bridge/hook-status.js"
+BRIDGE_JS="$SCRIPT_DIR/bridge/index.js"
+PORT="${PERMITTER_PORT:-3737}"
+CMD="${1:-help}"
+
+if [ ! -f "$HOOK_JS" ]; then
+  echo "Error: Can't find bridge scripts. Is this the permitter repo?"
+  echo "Expected: $HOOK_JS"
+  exit 1
+fi
+
+write_hooks() {
+  mkdir -p .claude
+  cat > .claude/settings.json << INNEREOF
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_JS"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_PERM"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_STATUS"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_STATUS"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_STATUS"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_STATUS"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOOK_STATUS"
+          }
+        ]
+      }
+    ]
+  }
+}
+INNEREOF
+}
+
+write_solo() {
+  mkdir -p .claude
+  cat > .claude/settings.local.json << INNEREOF
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)"
+    ]
+  }
+}
+INNEREOF
+}
+
+case "$CMD" in
+  setup)
+    write_hooks
+    write_solo
+    echo "Permitter installed in $(pwd)"
+    echo ""
+    echo "  Hooks:  .claude/settings.json"
+    echo "  Mode:   solo (M5Stack is sole approver)"
+    echo ""
+    echo "Next steps:"
+    echo "  permitter start    Start the bridge server"
+    echo "  claude             Launch Claude Code"
+    ;;
+
+  solo)
+    write_solo
+    echo "Solo mode — M5Stack is the sole approver."
+    echo "Restart Claude Code for changes to take effect."
+    ;;
+
+  dual)
+    rm -f .claude/settings.local.json
+    echo "Dual mode — device + keyboard approval."
+    echo "Restart Claude Code for changes to take effect."
+    ;;
+
+  start)
+    # Kill existing bridge if running
+    lsof -ti:$PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
+    nohup node "$BRIDGE_JS" > /tmp/permitter-bridge.log 2>&1 &
+    echo "Bridge started (PID $!, port $PORT)"
+    echo "Logs: /tmp/permitter-bridge.log"
+    ;;
+
+  stop)
+    lsof -ti:$PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
+    echo "Bridge stopped."
+    ;;
+
+  status)
+    curl -s "http://localhost:$PORT/status" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Bridge is not running."
+    ;;
+
+  off)
+    rm -f .claude/settings.json .claude/settings.local.json
+    echo "Permitter disabled. Hooks and permissions removed."
+    echo "Restart Claude Code for changes to take effect."
+    ;;
+
+  help|--help|-h|"")
+    echo "Permitter — physical permission panel for Claude Code"
+    echo ""
+    echo "Usage: permitter <command>"
+    echo ""
+    echo "Setup:"
+    echo "  setup     Install hooks in current project (solo mode by default)"
+    echo "  off       Remove all hooks and permissions"
+    echo ""
+    echo "Modes:"
+    echo "  solo      M5Stack only — no keyboard prompts"
+    echo "  dual      Device + keyboard prompts"
+    echo ""
+    echo "Bridge:"
+    echo "  start     Start the bridge server"
+    echo "  stop      Stop the bridge server"
+    echo "  status    Show bridge connection status"
+    echo ""
+    echo "Quick start:"
+    echo "  cd your-project"
+    echo "  permitter setup"
+    echo "  permitter start"
+    echo "  claude"
+    ;;
+
+  *)
+    echo "Unknown command: $CMD"
+    echo "Run 'permitter help' for usage."
+    exit 1
+    ;;
+esac

@@ -90,16 +90,14 @@ public:
     M5.Display.setCursor(228, 10);
     M5.Display.print(bridgeConnected ? "  READY  " : " WAITING ");
 
-    // Idle text
-    M5.Display.setTextSize(1);
-    M5.Display.setTextColor(B_DARK, B_CONCRETE);
-    M5.Display.setCursor(30, 112);
-    M5.Display.print("STANDING BY FOR AUTHORIZATION");
+    // Status strip — solid black, high contrast
+    M5.Display.fillRect(0, 96, 320, 34, B_BLACK);
+    M5.Display.setTextSize(3);
+    M5.Display.setTextColor(B_WHITE, B_BLACK);
+    M5.Display.setCursor(52, 102);
+    M5.Display.print("STANDING BY");
 
-    // Hazard bar
-    hazardBar(124, 6);
-
-    // Button zone — taller
+    // Button zone
     M5.Display.fillRect(0, 130, 320, 110, B_DARK);
     blockButton(3, 134, 103, 100, B_WHITE, B_BLACK, "YES");
     blockButton(109, 134, 103, 100, B_YELLOW, B_BLACK, "1x");
@@ -107,7 +105,7 @@ public:
   }
 
   void drawClock(const char* timeStr, const char* dateStr) override {
-    M5.Display.fillRect(0, 32, 320, 76, B_CONCRETE);
+    M5.Display.fillRect(0, 32, 320, 60, B_CONCRETE);
 
     // Heavy time
     M5.Display.setTextSize(4);
@@ -158,14 +156,14 @@ public:
     M5.Display.drawRect(5, 37, 310, 78, B_BLACK);
     M5.Display.drawRect(6, 38, 308, 76, B_BLACK);
 
-    M5.Display.setTextSize(1);
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(B_BLACK, B_WHITE);
     String a = req.action;
     int line = 0, pos = 0;
-    while (pos < (int)a.length() && line < 5) {
-      int end = pos + 48;
+    while (pos < (int)a.length() && line < 3) {
+      int end = pos + 24;
       if (end > (int)a.length()) end = a.length();
-      M5.Display.setCursor(12, 44 + line * 13);
+      M5.Display.setCursor(12, 44 + line * 22);
       M5.Display.print(a.substring(pos, end).c_str());
       pos = end;
       line++;
@@ -173,10 +171,10 @@ public:
 
     // Dual approval notice
     if (req.dual) {
-      M5.Display.setTextSize(1);
-      M5.Display.setTextColor(B_YELLOW, B_CONCRETE);
-      M5.Display.setCursor(40, 118);
-      M5.Display.print("!! ALSO NEEDS TERMINAL APPROVAL !!");
+      M5.Display.setTextSize(2);
+      M5.Display.setTextColor(B_RED, B_CONCRETE);
+      M5.Display.setCursor(20, 116);
+      M5.Display.print("+ TERMINAL APPROVE");
     }
 
     // Hazard bar
@@ -215,16 +213,45 @@ public:
     }
   }
 
+  void drawStatusBar(const char* state, int agents, int uptime) override {
+    // Full-width solid bar — high contrast
+    uint16_t bg = B_BLACK;
+    uint16_t fg = B_WHITE;
+    if (strcmp(state, "waiting") == 0) { bg = B_YELLOW; fg = B_BLACK; }
+
+    M5.Display.fillRect(0, 96, 320, 34, bg);
+
+    // State label
+    M5.Display.setTextSize(3);
+    M5.Display.setTextColor(fg, bg);
+    M5.Display.setCursor(6, 102);
+    if (strcmp(state, "working") == 0) M5.Display.print("WORKING");
+    else if (strcmp(state, "waiting") == 0) M5.Display.print("WAITING");
+    else M5.Display.print("IDLE");
+
+    // Uptime + agents on right side
+    M5.Display.setTextSize(2);
+    int m = uptime / 60;
+    int s = uptime % 60;
+    if (agents > 0) {
+      M5.Display.setCursor(180, 106);
+      M5.Display.printf("%dagt %dm%02ds", agents, m, s);
+    } else {
+      M5.Display.setCursor(220, 106);
+      M5.Display.printf("%dm%02ds", m, s);
+    }
+  }
+
   void drawActivity(const char* tool, const char* action) override {
-    // Bold activity bar
-    M5.Display.fillRect(0, 96, 320, 28, B_WHITE);
-    M5.Display.drawRect(0, 96, 320, 28, B_BLACK);
-    M5.Display.drawRect(1, 97, 318, 26, B_BLACK);
-    M5.Display.setTextSize(1);
+    // Bold activity bar — white on black, full width
+    M5.Display.fillRect(0, 96, 320, 34, B_WHITE);
+    M5.Display.drawRect(0, 96, 320, 34, B_BLACK);
+    M5.Display.drawRect(1, 97, 318, 32, B_BLACK);
+    M5.Display.setTextSize(2);
     M5.Display.setTextColor(B_BLACK, B_WHITE);
-    M5.Display.setCursor(8, 106);
-    String label = String(tool) + "  " + String(action);
-    if (label.length() > 48) label = label.substring(0, 48);
+    M5.Display.setCursor(6, 106);
+    String label = String(tool) + " " + String(action);
+    if (label.length() > 26) label = label.substring(0, 26);
     M5.Display.print(label.c_str());
   }
 

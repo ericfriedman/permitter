@@ -31,6 +31,9 @@ public:
   // Activity indicator — trusted tool auto-approved
   virtual void drawActivity(const char* tool, const char* action) = 0;
 
+  // Status bar — Claude state, agents, uptime
+  virtual void drawStatusBar(const char* state, int agents, int uptime) = 0;
+
   // Audio + haptics
   virtual void playAlertSound() = 0;
   virtual void playConfirmSound(bool accepted) = 0;

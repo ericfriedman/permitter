@@ -17,6 +17,14 @@ git clone https://github.com/ericfriedman/permitter.git
 cd permitter
 ```
 
+Add the `permitter` command to your PATH:
+
+```bash
+export PATH="$PATH:$(pwd)"
+```
+
+(Add this to your `.zshrc` or `.bashrc` to make it permanent.)
+
 ## Step 2: Flash the firmware onto the M5Stack
 
 Plug the M5Stack into your computer with a USB-C cable.
@@ -81,14 +89,14 @@ The device will reboot and show the boot screen. Once it connects to WiFi, you'l
 
 ## Step 3: Hook up a project
 
-Go to whatever project you want to use Permitter with and run the setup script:
+Go to whatever project you want to use Permitter with:
 
 ```bash
 cd ~/my-project
-bash /path/to/permitter/setup.sh
+permitter setup
 ```
 
-This creates `.claude/settings.json` in your project with the hook configured. The path to `hook.js` is resolved automatically — no manual editing needed.
+This installs 7 hooks in `.claude/settings.json` and enables solo mode (M5Stack as sole approver) via `.claude/settings.local.json`. All paths are resolved automatically.
 
 You only need to run this once per project.
 
@@ -97,11 +105,7 @@ You only need to run this once per project.
 From your project directory:
 
 ```bash
-# Start the bridge in the background
-node /path/to/permitter/bridge/index.js &
-# => Permitter bridge listening on http://0.0.0.0:3737
-
-# Launch Claude Code
+permitter start
 claude
 ```
 
@@ -121,21 +125,38 @@ Here's what happens:
 2. The hook intercepts the call and sends it to the bridge
 3. The M5Stack **beeps** and shows the permission request — you'll see the tool name, what it's trying to do, and a risk level color (green/yellow/red)
 4. Tap one of the three buttons:
-   - **Left (Trust)** — allow this tool forever for this session. Future calls to this tool will auto-approve with a brief activity flash on screen.
+   - **Left (Trust)** — allow this tool forever for this session. Future calls auto-approve with an activity flash on screen.
    - **Center (Once)** — allow just this one call
    - **Right (Deny)** — block the call
 5. The screen flashes your decision and returns to idle
 6. Claude Code continues immediately
 
-## Step 6: Understanding dual approval
+## Step 6: Solo vs Dual mode
 
-Some tools (Bash commands, web fetches) also trigger Claude Code's built-in terminal prompt. When this happens, the M5Stack shows **"ALSO NEEDS TERMINAL APPROVAL"** on the permission screen.
+**Solo mode** (default after `permitter setup`) — the M5Stack is the only approver. No keyboard prompts. This works by pre-allowing Bash, WebFetch, and WebSearch in Claude Code's permission system while keeping the PreToolUse hook as the gatekeeper.
 
-For these tools, you approve on the device first, then confirm on the keyboard too. This is by design — dangerous commands get a double-check.
+**Dual mode** — both the device and Claude Code's keyboard prompt are active. Some tools will require approval in both places.
 
-Tools like `Read`, `Write`, `Edit`, `Grep`, and `Glob` only need the device — no terminal prompt.
+Toggle between modes:
 
-## Step 7: Settings
+```bash
+permitter solo    # M5Stack only
+permitter dual    # device + keyboard
+```
+
+Restart Claude Code after switching for changes to take effect.
+
+## Step 7: Live status
+
+While Claude is working, the device shows real-time status:
+
+- **WORKING** — Claude is actively using tools
+- **WAITING** — Claude is waiting for your input
+- **IDLE** — no active session
+
+Session uptime and active agent count are displayed alongside the state.
+
+## Step 8: Settings
 
 Long-press the idle screen to open settings:
 
@@ -144,36 +165,44 @@ Long-press the idle screen to open settings:
 
 All settings persist across reboots.
 
-## Step 8: When you're done
+## Step 9: When you're done
 
 Exit Claude Code normally (type `/exit` or Ctrl+C), then stop the bridge:
 
 ```bash
-kill %1
+permitter stop
 ```
 
 ## Quick reference
 
 | Command | What it does |
 |---------|-------------|
-| `node bridge/index.js &` | Start bridge in background |
-| `claude` | Launch Claude Code (hook activates automatically) |
-| `kill %1` | Stop the bridge when done |
-| Long-press the idle screen | Open settings (themes + clock format) |
+| `permitter setup` | Install hooks in current project |
+| `permitter start` | Start bridge server |
+| `permitter stop` | Stop bridge server |
+| `permitter status` | Check bridge connection |
+| `permitter solo` | M5Stack only (no keyboard prompts) |
+| `permitter dual` | Device + keyboard prompts |
+| `permitter off` | Remove all hooks |
+| `claude` | Launch Claude Code (hooks activate automatically) |
+| Long-press idle screen | Open settings (themes + clock format) |
 
 ## Troubleshooting
 
 **M5Stack shows "WAITING" instead of "READY"**
-The device can't reach the bridge. Check that the bridge is running and that `BRIDGE_HOST` in `config.h` matches your computer's current local IP.
+The device can't reach the bridge. Check that the bridge is running (`permitter status`) and that `BRIDGE_HOST` in `config.h` matches your computer's current local IP.
 
 **Claude Code doesn't trigger the device**
-Make sure `.claude/settings.json` exists in your project directory and the path to `hook.js` is correct (absolute path, not relative).
+Make sure you ran `permitter setup` in your project directory. Check that `.claude/settings.json` exists with the hook paths.
 
 **Bridge not running / forgot to start it**
 No problem — when the hook can't reach the bridge, it falls back to Claude Code's normal terminal permission prompt. Nothing breaks.
 
 **Device won't connect to WiFi**
 ESP32 only supports 2.4GHz. Make sure your router has a 2.4GHz band enabled and `WIFI_SSID` in `config.h` matches exactly (case-sensitive, spaces matter).
+
+**Changes not taking effect after switching modes**
+You need to restart Claude Code (`/exit` then `claude`) for hook/permission changes to take effect.
 
 **"Disk not readable" dialog on macOS after flashing**
 Normal — macOS doesn't recognize the ESP32 flash partition. Just click "Ignore".
