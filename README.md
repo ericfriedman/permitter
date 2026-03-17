@@ -22,7 +22,7 @@ If the bridge is unreachable, the hook falls back to Claude Code's normal termin
 
 ### Prerequisites
 
-- [M5Stack Core2](https://shop.m5stack.com/products/m5stack-core2-esp32-iot-development-kit) (v1.1 tested)
+- [M5Stack Core2](https://amzn.to/4snph8w) (v1.1 tested)
 - [arduino-cli](https://arduino.github.io/arduino-cli/)
 - Node.js 18+
 - A 2.4GHz WiFi network (ESP32 doesn't support 5GHz)
