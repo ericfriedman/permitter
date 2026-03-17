@@ -85,13 +85,74 @@ Replace the path with the absolute path to `hook.js` on your machine.
 
 To enable for **all** projects, put the same config in `~/.claude/settings.json`.
 
-### 4. Use it
+### 4. Quickstart walkthrough
 
-1. Power the M5Stack (USB or battery) and wait for WiFi to connect
-2. Start the bridge: `node bridge/index.js`
-3. Open Claude Code in a hooked project
-4. When Claude tries to use a tool, the device beeps and shows the request
-5. Tap your choice — Claude Code continues immediately
+This walks you through your first Permitter-approved Claude Code session, start to finish.
+
+**Terminal 1 — start the bridge:**
+
+```bash
+cd permitter/bridge
+node index.js
+# => Permitter bridge listening on http://0.0.0.0:3737
+```
+
+Leave this running.
+
+**Terminal 2 — set up your project:**
+
+```bash
+cd ~/my-project
+
+# Create the hook config
+mkdir -p .claude
+cat > .claude/settings.json << 'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /absolute/path/to/permitter/bridge/hook.js"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+```
+
+Replace `/absolute/path/to/permitter` with the actual path to your permitter clone.
+
+**Launch Claude Code:**
+
+```bash
+claude
+```
+
+**Make sure the M5Stack is powered on** — it should show the idle screen with a clock and "READY" in the header (or "WAITING" if the bridge isn't reachable yet).
+
+**Ask Claude to do something:**
+
+```
+> read my package.json and tell me what dependencies I have
+```
+
+**What happens next:**
+
+1. Claude decides to use the `Read` tool
+2. Your M5Stack **beeps** and the screen switches to a permission request showing the tool name, action, and risk level
+3. Tap one of the three buttons:
+   - **Trust** (left) — allow this tool forever, won't ask again
+   - **Once** (center) — allow just this one call
+   - **Deny** (right) — block the tool call
+4. The screen flashes "APPROVED" or "DENIED" for a moment, then returns to idle
+5. Claude Code continues immediately with your decision
+
+That's it — every tool call Claude makes now routes through your physical button.
 
 ## Themes
 
