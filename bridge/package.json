@@ -1,0 +1,10 @@
+{
+  "name": "permitter-bridge",
+  "version": "0.1.0",
+  "description": "Bridge server for Permitter — connects Claude Code hooks to M5Stack Core2",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "license": "MIT"
+}
